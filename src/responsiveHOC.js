@@ -2,29 +2,31 @@ const React = require('react')
 const debounce = require('lodash/debounce')
 const isBrowser = typeof window !== 'undefined'
 
-function responsiveHOC (wait = 150, debounceOptions) {
+function responsiveHOC (wait = 150, debounceOptions, providedWindow) {
+  const resolvedWindow = providedWindow || window;
+  
   return Component => {
     class Responsive extends React.Component {
       constructor (props) {
         super(props)
         this.state = {
-          winWidth: isBrowser ? window.innerWidth : 0
+          winWidth: isBrowser ? resolvedWindow.innerWidth : 0
         }
         this.onResize = debounce(this.onResize.bind(this), wait, debounceOptions)
       }
 
       componentDidMount () {
-        window.addEventListener('resize', this.onResize)
+        resolvedWindow.addEventListener('resize', this.onResize)
       }
 
       componentWillUnmount () {
-        window.removeEventListener('resize', this.onResize)
+        resolvedWindow.removeEventListener('resize', this.onResize)
         this.onResize.cancel()
       }
 
       onResize () {
         this.setState({
-          winWidth: window.innerWidth
+          winWidth: resolvedWindow.innerWidth
         })
       }
 
