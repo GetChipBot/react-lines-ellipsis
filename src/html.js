@@ -2,70 +2,6 @@ const React = require('react')
 const {canvasStyle, mirrorProps} = require('./common')
 const {omit} = require('./helpers')
 
-function hookNode (node, basedOn) {
-  /* eslint-env browser */
-  if (basedOn !== 'letters' && basedOn !== 'words') {
-    throw new Error(`Unsupported options basedOn: ${basedOn}`)
-  }
-  if (node.nodeType === Node.TEXT_NODE) {
-    const frag = document.createDocumentFragment()
-    let units
-    switch (basedOn) {
-      case 'words':
-        units = node.textContent.split(/\b|(?=\W)/)
-        break
-      case 'letters':
-        units = Array.from(node.textContent)
-        break
-    }
-    units.forEach((unit) => {
-      frag.appendChild(dummySpan(unit))
-    })
-    node.parentNode.replaceChild(frag, node)
-  } else if (node.nodeType === Node.ELEMENT_NODE) {
-    const nodes = [].slice.call(node.childNodes)
-    const len = nodes.length
-    for (let i = 0; i < len; i++) {
-      hookNode(nodes[i], basedOn)
-    }
-  }
-}
-
-function dummySpan (text) {
-  const span = document.createElement('span')
-  span.className = 'LinesEllipsis-unit'
-  span.textContent = text
-  return span
-}
-
-function unwrapTextNode (node) {
-  node.parentNode.replaceChild(
-    document.createTextNode(node.textContent),
-    node
-  )
-}
-
-function removeFollowingElementLeaves (node, root) {
-  if (!root.contains(node) || node === root) return
-  while (node.nextElementSibling) {
-    node.parentNode.removeChild(node.nextElementSibling)
-  }
-  removeFollowingElementLeaves(node.parentNode, root)
-}
-
-function findBlockAncestor (node) {
-  let ndAncestor = node
-  while ((ndAncestor = ndAncestor.parentNode)) {
-    if (/p|div|main|section|h\d|ul|ol|li/.test(ndAncestor.tagName.toLowerCase())) {
-      return ndAncestor
-    }
-  }
-}
-
-function affectLayout (ndUnit) {
-  return !!(ndUnit.offsetHeight && (ndUnit.offsetWidth || /\S/.test(ndUnit.textContent)))
-}
-
 const defaultProps = {
   component: 'div',
   unsafeHTML: '',
@@ -75,6 +11,7 @@ const defaultProps = {
   className: '',
   basedOn: undefined,
   onReflow () {},
+  window: window,
   winWidth: undefined // for the HOC
 }
 const usedProps = Object.keys(defaultProps)
@@ -122,17 +59,81 @@ class HTMLEllipsis extends React.Component {
     }
     return super.setState(state, callback)
   }
+  
+  hookNode (node, basedOn) {
+    /* eslint-env browser */
+    if (basedOn !== 'letters' && basedOn !== 'words') {
+      throw new Error(`Unsupported options basedOn: ${basedOn}`)
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      const frag = this.props.window.document.createDocumentFragment()
+      let units
+      switch (basedOn) {
+        case 'words':
+          units = node.textContent.split(/\b|(?=\W)/)
+          break
+        case 'letters':
+          units = Array.from(node.textContent)
+          break
+      }
+      units.forEach((unit) => {
+        frag.appendChild(this.dummySpan(unit))
+      })
+      node.parentNode.replaceChild(frag, node)
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const nodes = [].slice.call(node.childNodes)
+      const len = nodes.length
+      for (let i = 0; i < len; i++) {
+        this.hookNode(nodes[i], basedOn)
+      }
+    }
+  }
+
+  dummySpan (text) {
+    const span = this.props.window.document.createElement('span')
+    span.className = 'LinesEllipsis-unit'
+    span.textContent = text
+    return span
+  }
+
+  unwrapTextNode (node) {
+    node.parentNode.replaceChild(
+      this.props.window.document.createTextNode(node.textContent),
+      node
+    )
+  }
+
+  removeFollowingElementLeaves (node, root) {
+    if (!root.contains(node) || node === root) return
+    while (node.nextElementSibling) {
+      node.parentNode.removeChild(node.nextElementSibling)
+    }
+    this.removeFollowingElementLeaves(node.parentNode, root)
+  }
+
+  findBlockAncestor (node) {
+    let ndAncestor = node
+    while ((ndAncestor = ndAncestor.parentNode)) {
+      if (/p|div|main|section|h\d|ul|ol|li/.test(ndAncestor.tagName.toLowerCase())) {
+        return ndAncestor
+      }
+    }
+  }
+
+  affectLayout (ndUnit) {
+    return !!(ndUnit.offsetHeight && (ndUnit.offsetWidth || /\S/.test(ndUnit.textContent)))
+  }
 
   initCanvas () {
     if (this.canvas) return
-    const canvas = this.canvas = document.createElement('div')
+    const canvas = this.canvas = this.props.window.document.createElement('div')
     canvas.className = `LinesEllipsis-canvas ${this.props.className}`
     canvas.setAttribute('aria-hidden', 'true')
     this.copyStyleToCanvas()
     Object.keys(canvasStyle).forEach((key) => {
       canvas.style[key] = canvasStyle[key]
     })
-    document.body.appendChild(canvas)
+    this.props.window.document.body.appendChild(canvas)
   }
 
   copyStyleToCanvas () {
@@ -147,7 +148,7 @@ class HTMLEllipsis extends React.Component {
     this.maxLine = +props.maxLine || 1
     this.canvas.innerHTML = props.unsafeHTML
     const basedOn = props.basedOn || (/^[\x00-\x7F]+$/.test(props.unsafeHTML) ? 'words' : 'letters')
-    hookNode(this.canvas, basedOn)
+    this.hookNode(this.canvas, basedOn)
     const clamped = this.putEllipsis(this.calcIndexes())
     const newState = {
       clamped,
@@ -162,13 +163,13 @@ class HTMLEllipsis extends React.Component {
     const len = nlUnits.length
     if (!nlUnits.length) return indexes
 
-    const nd1stLayoutUnit = nlUnits.find(affectLayout)
+    const nd1stLayoutUnit = nlUnits.find(this.affectLayout)
     if (!nd1stLayoutUnit) return indexes
 
     let line = 1
     let offsetTop = nd1stLayoutUnit.offsetTop
     for (let i = 1; i < len; i++) {
-      if (affectLayout(nlUnits[i]) && nlUnits[i].offsetTop - offsetTop > 1) {
+      if (this.affectLayout(nlUnits[i]) && nlUnits[i].offsetTop - offsetTop > 1) {
         line++
         indexes.push(i)
         offsetTop = nlUnits[i].offsetTop
@@ -187,28 +188,28 @@ class HTMLEllipsis extends React.Component {
     const ndEllipsis = this.makeEllipsisSpan()
 
     do {
-      removeFollowingElementLeaves(ndPrevUnit, this.canvas)
-      findBlockAncestor(ndPrevUnit).appendChild(ndEllipsis)
+      this.removeFollowingElementLeaves(ndPrevUnit, this.canvas)
+      this.findBlockAncestor(ndPrevUnit).appendChild(ndEllipsis)
       ndPrevUnit = this.nlUnits.pop()
     } while (ndPrevUnit && (
-      !affectLayout(ndPrevUnit) ||
+      !this.affectLayout(ndPrevUnit) ||
       ndEllipsis.offsetHeight > ndPrevUnit.offsetHeight ||
       ndEllipsis.offsetTop > ndPrevUnit.offsetTop)
     )
 
     if (ndPrevUnit) {
-      unwrapTextNode(ndPrevUnit)
+      this.unwrapTextNode(ndPrevUnit)
     }
-    this.nlUnits.forEach(unwrapTextNode)
+    this.nlUnits.forEach(this.unwrapTextNode)
 
     return true
   }
 
   makeEllipsisSpan () {
     const {ellipsisHTML, ellipsis} = this.props
-    const frag = document.createElement('span')
-    frag.appendChild(document.createElement('wbr'))
-    const ndEllipsis = document.createElement('span')
+    const frag = this.props.window.document.createElement('span')
+    frag.appendChild(this.props.window.document.createElement('wbr'))
+    const ndEllipsis = this.props.window.document.createElement('span')
     ndEllipsis.className = 'LinesEllipsis-ellipsis'
     if (ellipsisHTML) {
       ndEllipsis.innerHTML = ellipsisHTML
