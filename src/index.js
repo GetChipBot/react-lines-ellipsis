@@ -18,6 +18,7 @@ const defaultProps = {
   onReflow () {},
   text: '',
   trimRight: true,
+  window: window,
   winWidth: undefined // for the HOC
 }
 const usedProps = Object.keys(defaultProps)
@@ -68,18 +69,18 @@ class LinesEllipsis extends React.Component {
 
   initCanvas () {
     if (this.canvas) return
-    const canvas = this.canvas = document.createElement('div')
+    const canvas = this.canvas = this.props.window.document.createElement('div')
     canvas.className = `LinesEllipsis-canvas ${this.props.className}`
     canvas.setAttribute('aria-hidden', 'true')
     this.copyStyleToCanvas()
     Object.keys(canvasStyle).forEach((key) => {
       canvas.style[key] = canvasStyle[key]
     })
-    document.body.appendChild(canvas)
+    this.props.window.document.body.appendChild(canvas)
   }
 
   copyStyleToCanvas () {
-    const targetStyle = window.getComputedStyle(this.target)
+    const targetStyle = this.props.window.document.getComputedStyle(this.target)
     mirrorProps.forEach((key) => {
       this.canvas.style[key] = targetStyle[key]
     })
