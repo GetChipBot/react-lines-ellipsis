@@ -80,7 +80,7 @@ class LinesEllipsis extends React.Component {
   }
 
   copyStyleToCanvas () {
-    const targetStyle = this.props.window.document.getComputedStyle(this.target)
+    const targetStyle = this.props.window.getComputedStyle(this.target)
     mirrorProps.forEach((key) => {
       this.canvas.style[key] = targetStyle[key]
     })
